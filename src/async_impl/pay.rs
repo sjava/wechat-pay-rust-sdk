@@ -147,7 +147,7 @@ impl WechatPay {
         &self,
         image: Vec<u8>,
         filename: &str,
-    ) -> Result<crate::response::UploadResponse, PayError> {
+    ) -> Result<reqwest::Response, PayError> {
         let mut hasher = Sha256::new();
         hasher.update(&image);
         let hash = hasher.finalize();
@@ -179,10 +179,17 @@ impl WechatPay {
             .headers(headers)
             .multipart(form)
             .send()
-            .await?
-            .json()
             .await
-            .map(Ok)?
+            .map_err(|e| e.into())
+        // client
+        //     .post(url)
+        //     .headers(headers)
+        //     .multipart(form)
+        //     .send()
+        //     .await?
+        //     .json()
+        //     .await
+        //     .map(Ok)?
     }
 }
 
