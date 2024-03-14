@@ -143,11 +143,11 @@ impl WechatPay {
             })
             .ok_or_else(|| PayError::WeixinNotFound)
     }
-    pub async fn upload_image<R: ResponseTrait>(
+    pub async fn upload_image(
         &self,
         image: Vec<u8>,
         filename: &str,
-    ) -> Result<R, PayError> {
+    ) -> Result<crate::response::UploadResponse, PayError> {
         let mut hasher = Sha256::new();
         hasher.update(&image);
         let hash = hasher.finalize();
@@ -180,7 +180,7 @@ impl WechatPay {
             .multipart(form)
             .send()
             .await?
-            .json::<R>()
+            .json()
             .await
             .map(Ok)?
     }

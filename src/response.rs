@@ -92,3 +92,12 @@ pub struct CertificateResponse {
 }
 
 impl ResponseTrait for CertificateResponse {}
+
+#[derive(Debug, Deserialize)]
+pub struct UploadResponse {
+    pub code: Option<String>,
+    pub message: Option<String>,
+    pub media_id: Option<String>,
+    pub sign_data: Option<SignData>,
+}
+impl ResponseTrait for UploadResponse {}
