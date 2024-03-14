@@ -1,3 +1,4 @@
+use crate::debug;
 use crate::error::PayError;
 use crate::model::AppParams;
 use crate::model::H5Params;
@@ -13,9 +14,12 @@ use crate::response::JsapiResponse;
 use crate::response::MicroResponse;
 use crate::response::ResponseTrait;
 use crate::response::{CertificateResponse, NativeResponse};
+use reqwest::header::CONTENT_TYPE;
 use reqwest::header::{HeaderMap, REFERER};
+use reqwest::multipart::{Form, Part};
+use rsa::sha2::{Digest, Sha256};
+use serde_json::json;
 use serde_json::{Map, Value};
-use crate::{debug};
 
 impl WechatPay {
     pub(crate) async fn pay<P: ParamsTrait, R: ResponseTrait>(
@@ -117,8 +121,8 @@ impl WechatPay {
         self.get_pay(url).await
     }
     pub async fn get_weixin<S>(&self, h5_url: S, referer: S) -> Result<Option<String>, PayError>
-        where
-            S: AsRef<str>,
+    where
+        S: AsRef<str>,
     {
         let client = reqwest::Client::new();
         let mut headers = HeaderMap::new();
@@ -138,6 +142,47 @@ impl WechatPay {
                     .map(|line| line.to_string())
             })
             .ok_or_else(|| PayError::WeixinNotFound)
+    }
+    pub async fn upload_image<R: ResponseTrait>(
+        &self,
+        image: Vec<u8>,
+        filename: &str,
+    ) -> Result<R, PayError> {
+        let mut hasher = Sha256::new();
+        hasher.update(&image);
+        let hash = hasher.finalize();
+        let hash = hex::encode(hash.as_slice());
+        let meta = json!( {
+            "filename": filename,
+            "sha256": hash
+        });
+
+        let url = "/v3/merchant/media/upload";
+        let method = HttpMethod::POST;
+        let mut headers = self.build_header(method.clone(), &url, meta.to_string())?;
+        headers.insert(CONTENT_TYPE, "multipart/form-data".parse().unwrap());
+
+        let mut json_part_headers = HeaderMap::new();
+        json_part_headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
+        let json_part = Part::text(meta.to_string()).headers(json_part_headers);
+
+        let form_part = Part::bytes(image)
+            .file_name(filename.to_string())
+            .mime_str("image/jpeg")?;
+
+        let form = Form::new().part("meta", json_part).part("file", form_part);
+
+        let client = reqwest::Client::new();
+        let url = format!("{}/v3/merchant/media/upload", self.base_url());
+        client
+            .post(url)
+            .headers(headers)
+            .multipart(form)
+            .send()
+            .await?
+            .json::<R>()
+            .await
+            .map(Ok)?
     }
 }
 

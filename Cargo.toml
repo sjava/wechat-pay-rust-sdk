@@ -17,13 +17,14 @@ chrono = "0.4.31"
 rsa = { version = "0.9.6", features = ["sha2"] }
 aes-gcm = "0.10.3"
 md5 = "0.7.0"
-reqwest = { version = "0.11.23", features = ["json"] }
+reqwest = { version = "0.11.23", features = ["json", "multipart"] }
 thiserror = "1.0.56"
 uuid = { version = "1.6.1", features = ["v4"] }
 tracing = { version = "0.1.40", optional = true }
 tracing-subscriber = { version = "0.3.18", optional = true }
 serde = { version = "1.0.195", features = ["derive"] }
 serde_json = "1.0.111"
+hex = "0.4.3"
 
 [features]
 default = []
@@ -35,4 +36,3 @@ dotenvy = "0.15.7"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 tokio = { version = "1.35.1", features = ["full"] }
-
