@@ -21,6 +21,15 @@ use rsa::sha2::{Digest, Sha256};
 use serde_json::json;
 use serde_json::{Map, Value};
 
+use std::collections::HashSet;
+use std::sync::OnceLock;
+
+static SUPPORTED_EXTENSIONS: OnceLock<HashSet<&'static str>> = OnceLock::new();
+fn is_supported_image(extension: &str) -> bool {
+    let extensions = SUPPORTED_EXTENSIONS
+        .get_or_init(|| vec!["jpg", "jpeg", "png", "bmp"].into_iter().collect());
+    extensions.contains(extension.to_lowercase().as_str())
+}
 impl WechatPay {
     pub(crate) async fn pay<P: ParamsTrait, R: ResponseTrait>(
         &self,
@@ -148,32 +157,61 @@ impl WechatPay {
         image: Vec<u8>,
         filename: &str,
     ) -> Result<crate::response::UploadResponse, PayError> {
+        const MAX_SIZE: usize = 2 * 1024 * 1024;
+        const URL: &str = "/v3/merchant/media/upload";
+        // image's size must be less than 2M
+        if image.len() > MAX_SIZE {
+            return Err(PayError::WechatError(format!(
+                "Image size ({} bytes) exceeds the maximum allowed size ({} bytes)",
+                image.len(),
+                MAX_SIZE
+            )));
+        }
+        // check image format is supported
+        let ext = filename.split('.').last().ok_or_else(|| {
+            PayError::WechatError("Invalid filename, no extension found".to_string())
+        })?;
+        if !is_supported_image(ext) {
+            return Err(PayError::WechatError(format!(
+                "Unsupported image format: {}",
+                ext
+            )));
+        }
+
+        // calculate sha256
         let mut hasher = Sha256::new();
         hasher.update(&image);
         let hash = hasher.finalize();
         let hash = hex::encode(hash.as_slice());
+
         let meta = json!( {
             "filename": filename,
             "sha256": hash
         });
 
-        let url = "/v3/merchant/media/upload";
         let method = HttpMethod::POST;
-        let mut headers = self.build_header(method.clone(), &url, meta.to_string())?;
+        let mut headers = self.build_header(method.clone(), &URL, meta.to_string())?;
         headers.insert(CONTENT_TYPE, "multipart/form-data".parse().unwrap());
 
         let mut json_part_headers = HeaderMap::new();
         json_part_headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
         let json_part = Part::text(meta.to_string()).headers(json_part_headers);
 
+        let mime = match ext {
+            "jpg" | "jpeg" => "image/jpeg",
+            "png" => "image/png",
+            "bmp" => "image/bmp",
+            _ => "image/jpeg",
+        };
+
         let form_part = Part::bytes(image)
             .file_name(filename.to_string())
-            .mime_str("image/jpeg")?;
+            .mime_str(mime)?;
 
         let form = Form::new().part("meta", json_part).part("file", form_part);
 
         let client = reqwest::Client::new();
-        let url = format!("{}/v3/merchant/media/upload", self.base_url());
+        let url = format!("{}{}", self.base_url(), URL);
         client
             .post(url)
             .headers(headers)
